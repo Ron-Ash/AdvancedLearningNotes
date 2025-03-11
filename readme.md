@@ -1,3 +1,2 @@
-# Anonymous Walk Embedding
-
-This project attempts to recreate the methodology undertaken by the researchers of https://arxiv.org/abs/1805.11921
+# Standford CS224W
+This repository is my notes and work on the Machine Learning with Graphs course 
