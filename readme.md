@@ -1,0 +1,2 @@
+# Advanced Learning Notes
+This repository contains my personal notes from various online undergraduate and graduate-level courses that I'm pursuing in my free time. These studies support my professional development while also helping me expand my knowledge across a range of subjects.
