@@ -31,15 +31,13 @@ public class ChildReplaceDeleteResult<T> : DeleteResult<T> where T : IComparable
     }
 }
 public class ChildTransformDeleteResult<T> : DeleteResult<T> where T : IComparable<T> {
-    public Node<T> Child { get; }
-    public ChildTransformDeleteResult(Node<T> child) {
+    public Node<T>? Child { get; }
+    public ChildTransformDeleteResult(Node<T>? child) {
         Child = child;
     }
 }
 
 public abstract class Node<T>  where T: IComparable<T> {
-    public bool isLeaf { get; set; } = true;
-
 	public abstract Node<T>? Search(T Value);
 	public abstract T Max();
 	public abstract T Min();
@@ -404,9 +402,11 @@ public class Node_3<T> : Node<T> where T : IComparable<T> {
 
 public class Tree_2_3<T> where T : IComparable<T> {
 	public Node<T> root {get; set;}
+    public T initialValue {get; set;}
 	
 	public Tree_2_3(T value) {
-		this.root = new Node_2<T>(value);
+        this.initialValue = value;
+		this.root = new Node_2<T>(this.initialValue);
 	}
 	
 	public Node<T>? Search(T Value) {
@@ -440,7 +440,8 @@ public class Tree_2_3<T> where T : IComparable<T> {
                 root = child.Child;
                 break;
             case ChildTransformDeleteResult<T> child:
-                root = child.Child;
+                if (child.Child != null) root = child.Child;
+                else root = new Node_2<T>(this.initialValue);
                 break;
         }
     }
