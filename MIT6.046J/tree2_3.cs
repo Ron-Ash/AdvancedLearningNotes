@@ -445,20 +445,87 @@ public class Tree_2_3<T> where T : IComparable<T> {
         }
     }
 }
+
+
 public static class TreePrinter {
-    public static void Print<T>(Node<T>? node, string indent = "", string prefix="    ") where T : IComparable<T> {
+    public static void Print<T>(Node<T>? node) where T : IComparable<T> {
         if (node == null) return;
+        var lines = BuildLines(node);
+        foreach (var line in lines) Console.WriteLine(line);
+    }
+
+    private static List<string> BuildLines<T>(Node<T>? node) where T : IComparable<T> {
+        if (node == null) return new List<string>();
+
+        string label;
+        List<List<string>> childBlocks;
+
         if (node is Node_2<T> n2) {
-            if (!n2.isLeaf) Print(n2.left, "    "+indent, "┌── ");
-            Console.WriteLine($"{indent}{prefix}[{n2.value}]");
-            if (!n2.isLeaf) Print(n2.right, "    "+indent, "└── ");
+            label = $"({n2.value})";
+            childBlocks = n2.isLeaf
+                ? new List<List<string>>()
+                : new List<List<string>> { BuildLines(n2.left), BuildLines(n2.right) };
+        } else {
+            var n3 = (Node_3<T>)node;
+            label = $"({n3.leftValue}|{n3.rightValue})";
+            childBlocks = n3.isLeaf
+                ? new List<List<string>>()
+                : new List<List<string>> { BuildLines(n3.left), BuildLines(n3.middle), BuildLines(n3.right) };
         }
-        else if (node is Node_3<T> n3) {
-            if (!n3.isLeaf) Print(n3.left, "    "+indent, "┌── ");
-            Console.WriteLine($"{indent}{prefix}[{n3.leftValue}");
-            if (!n3.isLeaf) Print(n3.middle, "    "+indent, "├── ");
-            Console.WriteLine($"{indent}{prefix}{n3.rightValue}]");
-            if (!n3.isLeaf) Print(n3.right, "    "+indent, "└── ");
+
+        if (childBlocks.Count == 0)
+            return new List<string> { label };
+
+        // Pad all child blocks to the same height
+        int maxHeight = childBlocks.Max(b => b.Count);
+        int[] widths = childBlocks.Select(b => b.Max(l => l.Length)).ToArray();
+        for (int i = 0; i < childBlocks.Count; i++) {
+            int w = widths[i];
+            while (childBlocks[i].Count < maxHeight)
+                childBlocks[i].Add(new string(' ', w));
+            // Pad each line to consistent width
+            childBlocks[i] = childBlocks[i].Select(l => l.PadRight(w)).ToList();
         }
+
+        // Find the center x of each child block's root label
+        int[] centers = childBlocks.Select(b => b[0].IndexOf('(') + (b[0].IndexOf(')') - b[0].IndexOf('(')) / 2).ToArray();
+
+        // Build child row with 3-space gap between blocks
+        const string gap = "   ";
+        var childRows = new List<string>();
+        for (int row = 0; row < maxHeight; row++)
+            childRows.Add(string.Join(gap, childBlocks.Select(b => b[row])));
+
+        // Calculate absolute center positions of each child
+        int[] offsets = new int[childBlocks.Count];
+        offsets[0] = 0;
+        for (int i = 1; i < childBlocks.Count; i++)
+            offsets[i] = offsets[i-1] + widths[i-1] + gap.Length;
+        int[] absCenters = centers.Select((c, i) => c + offsets[i]).ToArray();
+
+        // Build connector line  
+        int totalWidth = offsets.Last() + widths.Last();
+        char[] connLine = new string(' ', totalWidth).ToCharArray();
+        for (int i = 0; i < absCenters.Length; i++) {
+            int pos = absCenters[i];
+            if (i == 0)                        connLine[pos] = '/';
+            else if (i == absCenters.Length-1) connLine[pos] = '\\';
+            else                               connLine[pos] = '|';
+            // fill dashes between first and last
+            if (i > 0)
+                for (int x = absCenters[i-1]+1; x < pos; x++)
+                    if (connLine[x] == ' ') connLine[x] = '-';
+        }
+
+        // Center the label over the connector span
+        int spanCenter = (absCenters[0] + absCenters.Last()) / 2;
+        int labelStart = spanCenter - label.Length / 2;
+        char[] labelLine = new string(' ', totalWidth).ToCharArray();
+        for (int i = 0; i < label.Length && labelStart+i < totalWidth; i++)
+            labelLine[labelStart + i] = label[i];
+
+        var result = new List<string> { new string(labelLine), new string(connLine) };
+        result.AddRange(childRows);
+        return result;
     }
 }
