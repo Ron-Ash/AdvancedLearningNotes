@@ -24,9 +24,15 @@ public class SplitInsertResult<T> : InsertResult<T> where T : IComparable<T> {
 
 public abstract class DeleteResult<T> where T : IComparable<T> { }
 public class NoChangeDeleteResult<T> : DeleteResult<T> where T : IComparable<T> { }
-public class ChildDeleteResult<T> : DeleteResult<T> where T : IComparable<T> {
+public class ChildReplaceDeleteResult<T> : DeleteResult<T> where T : IComparable<T> {
     public Node<T> Child { get; }
-    public ChildDeleteResult(Node<T> child) {
+    public ChildReplaceDeleteResult(Node<T> child) {
+        Child = child;
+    }
+}
+public class ChildTransformDeleteResult<T> : DeleteResult<T> where T : IComparable<T> {
+    public Node<T> Child { get; }
+    public ChildTransformDeleteResult(Node<T> child) {
         Child = child;
     }
 }
@@ -43,15 +49,15 @@ public abstract class Node<T>  where T: IComparable<T> {
 
 
 public class Node_2<T> : Node<T> where T : IComparable<T> {
-	public T value {get;}
-	public Node<T>? left;
-	public Node<T>? right;
+	public T value  {get; set;}
+	public Node<T>? left {get; set;}
+	public Node<T>? right {get; set;}
+    public bool isLeaf => (left==null) && (right==null);
 	
 	public Node_2(T Value) {
 		this.value = Value;
 		this.left = null;
 		this.right = null;
-		this.isLeaf = true;
 	}
 	
 	public override Node<T>? Search(T Value) {
@@ -102,13 +108,12 @@ public class Node_2<T> : Node<T> where T : IComparable<T> {
             case ChildInsertResult<T> child:
                 if (cmp <= 0) this.left = child.Child;
                 else this.right = child.Child;
-                this.isLeaf = false;
                 return new NoChangeInsertResult<T>();
             case SplitInsertResult<T> split:
                 int pcmp = Comparer<T>.Default.Compare(split.Promoted, this.value);
                 Node_3<T> newNode = pcmp <= 0
-                    ? new Node_3<T>(split.Promoted, this.value) { left=split.Left, middle=split.Right, right=this.right, isLeaf=false }
-                    : new Node_3<T>(this.value, split.Promoted) { left=this.left, middle=split.Left, right=split.Right, isLeaf=false };
+                    ? new Node_3<T>(split.Promoted, this.value) { left=split.Left, middle=split.Right, right=this.right}
+                    : new Node_3<T>(this.value, split.Promoted) { left=this.left, middle=split.Left, right=split.Right};
                 return new ChildInsertResult<T>(newNode);
             default:
                 throw new InvalidOperationException("Unexpected result type.");
@@ -118,41 +123,80 @@ public class Node_2<T> : Node<T> where T : IComparable<T> {
 
     public override DeleteResult<T> Delete(T Value) {
         int cmp = Comparer<T>.Default.Compare(Value, this.value);
-        if (isLeaf) {
-            return (cmp==0)
-                ? new ChildDeleteResult<T>(null) 
+        if (isLeaf)
+            return cmp == 0
+                ? new ChildTransformDeleteResult<T>(null)
                 : new NoChangeDeleteResult<T>();
-        }
 
-        DeleteResult<T> result = cmp <= 0
-            ? left!.Delete(Value)
-            : right!.Delete(Value);
+        bool goLeft = cmp<0;
+        T target = Value;
+        if (cmp == 0) {
+            T successor = right!.Min();
+            this.value = successor;
+            target = successor;
+            goLeft = false;
+        }
+        DeleteResult<T> result = goLeft 
+            ? left!.Delete(target) 
+            : right!.Delete(target);
+
         switch (result) {
             case NoChangeDeleteResult<T>:
-                break;
-            case ChildDeleteResult<T> child:
-                break;
+                return result;
+            case ChildReplaceDeleteResult<T> child:
+                if (goLeft) left  = child.Child;
+                else right = child.Child;
+                return new NoChangeDeleteResult<T>();
+
+            case ChildTransformDeleteResult<T> child:
+                return goLeft
+                    ? HandleUnderflowLeft(child.Child)
+                    : HandleUnderflowRight(child.Child);
             default:
                 throw new InvalidOperationException("Unexpected result type.");
         }
-        return new NoChangeDeleteResult<T>();
+    }
+    private DeleteResult<T> HandleUnderflowLeft(Node<T>? child) {
+        if (right is Node_3<T> r3) {
+            var newLeft = new Node_2<T>(this.value) { left=child, right=r3.left };
+            var newRight = new Node_2<T>(r3.rightValue) { left=r3.middle, right=r3.right };
+            return new ChildReplaceDeleteResult<T>(
+                new Node_2<T>(r3.leftValue) { left=newLeft, right=newRight });
+        } else {
+            var r2 = (Node_2<T>)right!;
+            return new ChildTransformDeleteResult<T>(
+                new Node_3<T>(this.value, r2.value) { left=child, middle=r2.left, right=r2.right });
+        }
+    }
+    private DeleteResult<T> HandleUnderflowRight(Node<T>? child) {
+        if (left is Node_3<T> l3) {
+            var newLeft = new Node_2<T>(l3.leftValue) { left=l3.left,  right=l3.middle };
+            var newRight = new Node_2<T>(this.value) { left=l3.right, right=child };
+            return new ChildReplaceDeleteResult<T>(
+                new Node_2<T>(l3.rightValue) { left=newLeft, right=newRight });
+        } else {
+            var l2 = (Node_2<T>)left!;
+            return new ChildTransformDeleteResult<T>(
+                new Node_3<T>(l2.value, this.value) { left=l2.left, middle=l2.right, right=child });
+        }
     }
 }
 
 
 public class Node_3<T> : Node<T> where T : IComparable<T> {
-	public T leftValue {get;}
-	public T rightValue {get;}
-	public Node<T>? left;
-	public Node<T>? middle;
-	public Node<T>? right;	
+	public T leftValue  {get; set;}
+	public T rightValue  {get; set;}
+	public Node<T>? left {get; set;}
+	public Node<T>? middle {get; set;}
+	public Node<T>? right {get; set;}	
+    public bool isLeaf => (left==null) && (middle==null) && (right==null);
+
 	public Node_3(T LeftValue, T RightValue) {
 		this.leftValue = LeftValue;
 		this.rightValue = RightValue;
 		this.left = null;
 		this.middle = null;
 		this.right = null;
-		this.isLeaf = true;
 	}
 	
 	public override Node<T>? Search(T Value) {
@@ -225,7 +269,6 @@ public class Node_3<T> : Node<T> where T : IComparable<T> {
                 if (leftCmp <= 0) this.left = child.Child;
                 else if (rightCmp <= 0) this.middle = child.Child;
                 else this.right = child.Child;
-                this.isLeaf = false;
                 return new NoChangeInsertResult<T>();
             case SplitInsertResult<T> split:
                 int pcmpLeft = Comparer<T>.Default.Compare(split.Promoted, this.leftValue);
@@ -234,16 +277,16 @@ public class Node_3<T> : Node<T> where T : IComparable<T> {
                 Node_2<T> leftChild, rightChild;
                 if (pcmpLeft<=0) {
                     median = this.leftValue;
-                    leftChild = new Node_2<T>(split.Promoted) { left=split.Left, right=split.Right, isLeaf=false };
-                    rightChild = new Node_2<T>(this.rightValue) { left=this.middle, right=this.right, isLeaf=false };
+                    leftChild = new Node_2<T>(split.Promoted) { left=split.Left, right=split.Right };
+                    rightChild = new Node_2<T>(this.rightValue) { left=this.middle, right=this.right };
                 } else if (pcmpRight<=0) {
                     median = split.Promoted;
-                    leftChild = new Node_2<T>(this.leftValue) { left=this.left, right=split.Left, isLeaf=false };
-                    rightChild = new Node_2<T>(this.rightValue) { left=split.Right, right=this.right, isLeaf=false };
+                    leftChild = new Node_2<T>(this.leftValue) { left=this.left, right=split.Left };
+                    rightChild = new Node_2<T>(this.rightValue) { left=split.Right, right=this.right };
                 } else {
                     median = this.rightValue;
-                    leftChild = new Node_2<T>(this.leftValue) { left=this.left, right=this.middle, isLeaf=false };
-                    rightChild = new Node_2<T>(split.Promoted) { left=split.Left, right=split.Right, isLeaf=false };
+                    leftChild = new Node_2<T>(this.leftValue) { left=this.left, right=this.middle };
+                    rightChild = new Node_2<T>(split.Promoted) { left=split.Left, right=split.Right };
                 }
                 return new SplitInsertResult<T>(median, leftChild, rightChild);;
             default:
@@ -253,7 +296,109 @@ public class Node_3<T> : Node<T> where T : IComparable<T> {
     }
 
     public override DeleteResult<T> Delete(T Value) {
-        return new NoChangeDeleteResult<T>();
+        int leftCmp  = Comparer<T>.Default.Compare(Value, this.leftValue);
+        int rightCmp = Comparer<T>.Default.Compare(Value, this.rightValue);
+
+        if (isLeaf) {
+            if (leftCmp == 0)
+                return new ChildReplaceDeleteResult<T>(new Node_2<T>(this.rightValue));
+            if (rightCmp == 0)
+                return new ChildReplaceDeleteResult<T>(new Node_2<T>(this.leftValue));
+            return new NoChangeDeleteResult<T>();
+        }
+
+        bool goLeft = leftCmp<0;
+        bool goMiddle = (leftCmp>=0) && (rightCmp<=0);
+        T target = Value;
+        if (leftCmp == 0) {
+            T successor = middle!.Min();
+            this.leftValue = successor;
+            target = successor;
+            goLeft = false;
+            goMiddle = true;
+        } else if (rightCmp == 0) {
+            T successor = right!.Min();
+            this.rightValue = successor;
+            target = successor;
+            goMiddle = false;
+        }
+        DeleteResult<T> result = goLeft
+            ? left!.Delete(target)
+            : goMiddle
+                ? middle!.Delete(target)
+                : right!.Delete(target);
+
+        switch (result) {
+            case NoChangeDeleteResult<T>:
+                return result;
+            case ChildReplaceDeleteResult<T> child:
+                if (goLeft) left = child.Child;
+                else if (goMiddle) middle = child.Child;
+                else right  = child.Child;
+                return new NoChangeDeleteResult<T>();
+            case ChildTransformDeleteResult<T> child:
+                return goLeft
+                    ? HandleUnderflowLeft(child.Child)
+                    : goMiddle
+                        ? HandleUnderflowMiddle(child.Child)
+                        : HandleUnderflowRight(child.Child);
+            default:
+                throw new InvalidOperationException("Unexpected result type.");
+        }
+    }
+    private DeleteResult<T> HandleUnderflowLeft(Node<T>? child) {
+        if (middle is Node_3<T> m3) {
+            var newLeft = new Node_2<T>(this.leftValue) { left=child, right=m3.left };
+            var newMiddle = new Node_2<T>(m3.rightValue) { left=m3.middle, right=m3.right };
+            this.left = newLeft;
+            this.middle = newMiddle;
+            this.leftValue = m3.leftValue;
+            return new NoChangeDeleteResult<T>();
+        } else {
+            var m2 = (Node_2<T>)middle!;
+            var merged = new Node_3<T>(this.leftValue, m2.value) { left=child, middle=m2.left, right=m2.right };
+            this.left = merged;
+            this.middle = null;
+            return new ChildReplaceDeleteResult<T>(
+                new Node_2<T>(this.rightValue) { left=merged, right=this.right });
+        }
+    }
+    private DeleteResult<T> HandleUnderflowMiddle(Node<T>? child) {
+        if (left is Node_3<T> l3) {
+            var newLeft = new Node_2<T>(l3.leftValue) { left=l3.left, right=l3.middle };
+            var newMiddle = new Node_2<T>(this.leftValue) { left=l3.right, right=child };
+            this.left = newLeft;
+            this.middle = newMiddle;
+            this.leftValue = l3.rightValue;
+            return new NoChangeDeleteResult<T>();
+        } else if (right is Node_3<T> r3) {
+            var newMiddle = new Node_2<T>(this.rightValue) { left=child, right=r3.left };
+            var newRight  = new Node_2<T>(r3.rightValue) { left=r3.middle, right=r3.right };
+            this.middle = newMiddle;
+            this.right = newRight;
+            this.rightValue = r3.leftValue;
+            return new NoChangeDeleteResult<T>();
+        } else {
+            var l2 = (Node_2<T>)left!;
+            var merged = new Node_3<T>(l2.value, this.leftValue) { left=l2.left, middle=l2.right, right=child };
+            return new ChildReplaceDeleteResult<T>(
+                new Node_2<T>(this.rightValue) { left=merged, right=this.right });
+        }
+    }
+    private DeleteResult<T> HandleUnderflowRight(Node<T>? child) {
+        if (middle is Node_3<T> m3) {
+            var newMiddle = new Node_2<T>(m3.leftValue) { left=m3.left, right=m3.middle };
+            var newRight = new Node_2<T>(this.rightValue) { left=m3.right, right=child };
+            this.middle = newMiddle;
+            this.right = newRight;
+            this.rightValue = m3.rightValue;
+            return new NoChangeDeleteResult<T>();
+        } else {
+            var m2 = (Node_2<T>)middle!;
+            var merged = new Node_3<T>(m2.value, this.rightValue) { left=m2.left, middle=m2.right, right=child };
+            return new ChildReplaceDeleteResult<T>(
+                new Node_2<T>(this.leftValue) { left=this.left, right=merged });
+        }
     }
 }
 
@@ -276,13 +421,26 @@ public class Tree_2_3<T> where T : IComparable<T> {
                 root = new Node_2<T>(split.Promoted) {
                     left = split.Left,
                     right = split.Right,
-                    isLeaf = false
                 };
                 break;
             case ChildInsertResult<T> child:
                 root = child.Child;
                 break;
             case NoChangeInsertResult<T> _:
+                break;
+        }
+    }
+
+    public void Delete(T value) {
+        var result = root.Delete(value);
+        switch (result) {
+            case NoChangeDeleteResult<T> _:
+                break;
+            case ChildReplaceDeleteResult<T> child:
+                root = child.Child;
+                break;
+            case ChildTransformDeleteResult<T> child:
+                root = child.Child;
                 break;
         }
     }
