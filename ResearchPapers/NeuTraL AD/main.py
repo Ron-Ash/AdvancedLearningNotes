@@ -109,6 +109,11 @@ if __name__ == "__main__":
     normal_mask = (y_train == 0)
     train_data = TensorDataset(X_train[normal_mask], y_train[normal_mask])
 
+    # ── Train on all samples with unknown positives (unsupervised setup) ──
+    # positive_mask = (y_train == 1)
+    # y_train[positive_mask] = 0
+    # train_data = TensorDataset(X_train, y_train)
+
     # Test on full distribution
     test_data = TensorDataset(X_test, y_test)
 
@@ -121,14 +126,15 @@ if __name__ == "__main__":
     model = NeuTraLAD(
         input_dim=input_dim,
         hidden_dim=64,
+        depth=10,
         temperature=0.1,
-        K=11
+        K=6
     )
 
     scores, labels = train_neutralad(
         model,
         train_loader,
         test_loader,
-        epochs=50,
+        epochs=100,
         device='cuda'
     )
