@@ -8,79 +8,70 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-# ── Loss function (doubles as anomaly score) ────────────────────────────────
-def neutralad_loss(scores, eval=False):
-    """
-    scores: (B,) per-sample anomaly scores from model.forward()
-    eval:   if True, return raw scores for AUC; if False, return mean for backprop
-    """
-    if eval:
-        return scores
-    return scores.mean()
+class NeuTraLADTrainer():
+    def __init__(self, input_dim, hidden_dim, depth, temperature=1, K=11, epochs=10):
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model = NeuTraLAD(input_dim, hidden_dim, depth, temperature, K).to(self.device)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), 1e-3)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', patience=5, factor=0.5)
+        self.epochs = epochs
+    
+    def epoch(self, train_loader):
+        self.model.train()
+        total_loss = 0
+        for batch in tqdm(train_loader):
+            x = batch[0].to(self.device)
+            self.optimizer.zero_grad()
+            scores = self.model(x)
+            loss = scores.mean()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            self.optimizer.step()
+            total_loss += loss.item() * x.size(0)
+        return total_loss / len(train_loader.dataset)
 
+    def evaluate(self, train_loader):
+        self.model.eval()
+        all_scores, all_labels = [], []
+        with torch.no_grad():
+            for batch in train_loader:
+                x, y = batch
+                x = x.to(self.device)
+                scores = self.model(x)
+                all_scores.append(scores.cpu().numpy())
+                all_labels.append(y.numpy())
 
-# ── Training loop ────────────────────────────────────────────────────────────
-def train_epoch(model, loader, optimizer, device):
-    model.train()
-    total_loss = 0
-    for batch in tqdm(loader):
-        x = batch[0].to(device)
-        scores = model(x)               # (B,) per-sample DCL scores
-        loss = neutralad_loss(scores)   # scalar mean
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item() * x.size(0)
-    return total_loss / len(loader.dataset)
+        all_scores = np.concatenate(all_scores)
+        all_labels = np.concatenate(all_labels)
+        auc = roc_auc_score(all_labels, all_scores)
+        ap  = average_precision_score(all_labels, all_scores)
+        self.model.train()
+        return auc, ap, all_scores, all_labels
 
-
-# ── Evaluation ───────────────────────────────────────────────────────────────
-def evaluate(model, loader, device):
-    model.eval()
-    all_scores, all_labels = [], []
-    with torch.no_grad():
-        for batch in loader:
-            x, y = batch
-            x = x.to(device)
-            scores = model(x)                        # (B,)
-            all_scores.append(scores.cpu().numpy())
-            all_labels.append(y.numpy())
-
-    all_scores = np.concatenate(all_scores)
-    all_labels = np.concatenate(all_labels)
-    auc = roc_auc_score(all_labels, all_scores)
-    ap  = average_precision_score(all_labels, all_scores)
-    return auc, ap, all_scores, all_labels
-
-
-# ── Main training script ─────────────────────────────────────────────────────
-def train_neutralad(
-    model,
-    train_loader,
-    test_loader,
-    epochs=50,
-    lr=1e-3,
-    device='cuda' if torch.cuda.is_available() else 'cpu'
-):
-    model = model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-
-    best_auc = 0
-    for epoch in range(1, epochs + 1):
-        train_loss = train_epoch(model, train_loader, optimizer, device)
-        scheduler.step()
-
-        auc, ap, scores, labels = evaluate(model, test_loader, device)
-        best_auc = max(best_auc, auc)
-
-        if epoch % 5 == 0:
+    def train(self, train_loader, test_loader):
+        self.model.train()
+        best_auc = 0
+        total_patience = 3
+        patience_counter = 0
+        best_scores, best_labels = None, None
+        for epoch in range(self.epochs):
+            train_loss = self.epoch(train_loader)
+            auc, ap, scores, labels = self.evaluate(test_loader)
+            if auc > best_auc:
+                best_auc = auc
+                best_scores, best_labels = scores, labels
+            else:
+                patience_counter += 1
+                if patience_counter > total_patience:
+                    print(f"Early stopping at epoch {epoch}")
+                    break
+            self.scheduler.step(auc)
+            # statistics printout
             print(f"Epoch {epoch:3d} | Loss: {train_loss:.4f} | AUC: {auc:.4f} | AP: {ap:.4f}")
+        print(f"\nBest AUC: {best_auc:.4f}")
+        return best_scores, best_labels
 
-    print(f"\nBest AUC: {best_auc:.4f}")
-    return scores, labels
 
-# ── Example usage ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
 
     df = pd.read_csv("ResearchPapers/NeuTraL AD/creditcard.csv")
@@ -89,14 +80,9 @@ if __name__ == "__main__":
     y = df["Class"].values
 
     scaler = StandardScaler()
-    X = scaler.fit_transform(X)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        stratify=y,        # ← ensures fraud cases in both sets
-        random_state=42
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+    X_train = scaler.fit_transform(X_train)
+    X_test  = scaler.transform(X_test)
 
     # ── Convert to PyTorch tensors ──────────────────────
     X_train = torch.tensor(X_train, dtype=torch.float32)
@@ -123,18 +109,10 @@ if __name__ == "__main__":
     # ── Model ────────────────────────────────────────────
     input_dim = X_train.shape[1]
 
-    model = NeuTraLAD(
+    trainer = NeuTraLADTrainer(
         input_dim=input_dim,
         hidden_dim=64,
-        depth=10,
-        temperature=0.1,
-        K=6
-    )
+        depth=4,
+        temperature=0.5)
 
-    scores, labels = train_neutralad(
-        model,
-        train_loader,
-        test_loader,
-        epochs=100,
-        device='cuda'
-    )
+    scores, labels = trainer.train(train_loader, test_loader)
