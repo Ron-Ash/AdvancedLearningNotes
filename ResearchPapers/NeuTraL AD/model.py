@@ -38,11 +38,10 @@ class NeuTraLAD(nn.Module):
         transformations = [self.encoder(T(x)) for T in self.transforms]               # K*(B, D)
         scores = []
         for k, z_k in enumerate(transformations):
-
-            log_sim_z_zk = F.cosine_similarity(z, z_k, dim=-1).clamp(min=-1+1e-6, max=1-1e-6)/self.temperature
+            log_sim_z_zk = F.cosine_similarity(z, z_k, dim=-1)/self.temperature
 
             log_neg_terms = torch.stack([
-                F.cosine_similarity(z_l, z_k, dim=-1).clamp(min=-1+1e-6, max=1-1e-6)/self.temperature
+                F.cosine_similarity(z_l, z_k, dim=-1)/self.temperature
                 for l, z_l in enumerate(transformations) if l != k
             ], dim=0)
 

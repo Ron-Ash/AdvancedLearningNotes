@@ -1,3 +1,4 @@
+import copy
 import torch
 import numpy as np
 import pandas as pd
@@ -53,11 +54,14 @@ class NeuTraLADTrainer():
         best_auc = 0
         total_patience = 3
         patience_counter = 0
+        best_model_state = None
         best_scores, best_labels = None, None
         for epoch in range(self.epochs):
             train_loss = self.epoch(train_loader)
             auc, ap, scores, labels = self.evaluate(test_loader)
             if auc > best_auc:
+                patience_counter = max(0, patience_counter-1)
+                best_model_state = copy.deepcopy(self.model.state_dict())
                 best_auc = auc
                 best_scores, best_labels = scores, labels
             else:
@@ -69,11 +73,11 @@ class NeuTraLADTrainer():
             # statistics printout
             print(f"Epoch {epoch:3d} | Loss: {train_loss:.4f} | AUC: {auc:.4f} | AP: {ap:.4f}")
         print(f"\nBest AUC: {best_auc:.4f}")
+        self.model.load_state_dict(best_model_state)
         return best_scores, best_labels
 
 
 if __name__ == "__main__":
-
     df = pd.read_csv("ResearchPapers/NeuTraL AD/creditcard.csv")
     df.drop(columns=['Time'], inplace=True)
     X = df.drop(columns=["Class"]).values
@@ -115,4 +119,6 @@ if __name__ == "__main__":
         depth=4,
         temperature=0.5)
 
+    auc, ap, _scores, _labels = trainer.evaluate(test_loader)
+    print(f"Epoch {-1} | Loss: -- | AUC: {auc:.4f} | AP: {ap:.4f}")
     scores, labels = trainer.train(train_loader, test_loader)
