@@ -7,7 +7,7 @@ class NeuTraLAD(nn.Module):
         super().__init__()
         # K learnable transformations
         self.transforms = nn.ModuleList(
-            [self.build_mlp(input_dim, hidden_dim, input_dim, depth, use_norm_output=False)
+            [self.build_mlp(input_dim, hidden_dim, input_dim, depth, use_norm_output=False, use_drop_out=False)
              for _ in range(K)]
         )
         # Shared encoder: Dropout needs to be False as otherwise will get different dropout masks 
@@ -16,6 +16,7 @@ class NeuTraLAD(nn.Module):
         self.temperature = temperature
         self.K = K
 
+    # Added GELU + Dropout to make a richer model as well as perform better for higher depth
     def build_mlp(self, input_dim, hidden_dim, output_dim, depth=2, 
                   use_norm_output=True, use_drop_out=True, drop_out=0.3):
         assert depth >= 2
