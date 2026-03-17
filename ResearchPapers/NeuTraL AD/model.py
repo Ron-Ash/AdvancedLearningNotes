@@ -36,6 +36,7 @@ class NeuTraLAD(nn.Module):
 
     def forward(self, x):
         z = self.encoder(x)                                                           # (B, D)
+        # Skip Connection can used: self.encoder(T(x) + x)
         transformations = [self.encoder(T(x)) for T in self.transforms]               # K*(B, D)
         scores = []
         for k, z_k in enumerate(transformations):
