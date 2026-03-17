@@ -7,7 +7,7 @@ class NeuTraLAD(nn.Module):
         super().__init__()
         # K learnable transformations
         self.transforms = nn.ModuleList(
-            [self.build_mlp(input_dim, hidden_dim, input_dim, depth, use_norm_output=False, use_drop_out=False)
+            [self.build_mlp(input_dim, hidden_dim, input_dim, depth, use_norm_output=False)
              for _ in range(K)]
         )
         # Shared encoder: Dropout needs to be False as otherwise will get different dropout masks 
