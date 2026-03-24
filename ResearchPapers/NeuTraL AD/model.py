@@ -35,9 +35,9 @@ class NeuTraLAD(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        z = self.encoder(x)                                                           # (B, D)
+        z = self.encoder(x)
         # Skip Connection can used: self.encoder(T(x) + x)
-        transformations = [self.encoder(T(x)) for T in self.transforms]               # K*(B, D)
+        transformations = [self.encoder(T(x)) for T in self.transforms]
         scores = []
         for k, z_k in enumerate(transformations):
             log_sim_z_zk = F.cosine_similarity(z, z_k, dim=-1)/self.temperature
@@ -47,8 +47,8 @@ class NeuTraLAD(nn.Module):
                 for l, z_l in enumerate(transformations) if l != k
             ], dim=0)
 
-            all_terms = torch.cat([log_sim_z_zk.unsqueeze(0), log_neg_terms], dim=0)  # (K, B)
-            log_denominator = torch.logsumexp(all_terms, dim=0)                       # (B,)
-            scores.append(log_sim_z_zk - log_denominator)                             # K*(B,)
+            all_terms = torch.cat([log_sim_z_zk.unsqueeze(0), log_neg_terms], dim=0)
+            log_denominator = torch.logsumexp(all_terms, dim=0)
+            scores.append(log_sim_z_zk - log_denominator)
 
         return -torch.stack(scores, dim=0).sum(dim=0)

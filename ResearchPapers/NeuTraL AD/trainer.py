@@ -18,12 +18,16 @@ class NeuTraLADTrainer():
         total_loss = 0
         for batch in tqdm(train_loader):
             x = batch[0].to(self.device)
-            self.optimizer.zero_grad()
-            scores = self.model(x)
-            loss = scores.mean()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-            self.optimizer.step()
+            self.optimizer.zero_grad()                  # Clear gradients from previous batch
+            
+            scores = self.model(x)                      # Compute model output scores
+            loss = scores.mean()                        # Aggregate scores into a scalar loss
+
+            loss.backward()                             # Calculates parameters' gradients (backpropagation)
+            torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), max_norm=1.0)  # Clips gradient norm to prevent exploding gradients
+            self.optimizer.step()                       # Update parameters to minimise loss (opposite gradient direction)
+
             total_loss += loss.item() * x.size(0)
         return total_loss/len(train_loader.dataset)
 
