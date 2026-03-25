@@ -9,6 +9,7 @@ class NeuTraLADTrainer():
     def __init__(self, input_dim, hidden_dim, depth, temperature=1, K=11, epochs=10):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = NeuTraLAD(input_dim, hidden_dim, depth, temperature, K).to(self.device)
+        self.model.to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), 1e-3)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', patience=5, factor=0.5)
         self.epochs = epochs
