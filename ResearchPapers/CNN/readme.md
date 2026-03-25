@@ -1,0 +1,2 @@
+The following notes are my exploration and implementation of research paper "***Handwritten Digit Recognition with a Back-Propogation Network***"
+- research paper: https://proceedings.neurips.cc/paper/1989/file/53c3bce66e43be4f209556518c2fcb54-Paper.pdf
