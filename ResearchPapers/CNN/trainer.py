@@ -70,7 +70,7 @@ class BaseTrainer(ABC):
         all_labels = torch.cat(all_labels)
         return self.compute_metric(all_scores, all_labels), all_scores, all_labels
 
-    def train(self, train_loader, test_loader):
+    def train(self, train_loader, val_loader):
         
         best_statistic = -float('inf') if self.mode=='max' else float('inf')
         patience_counter = 0
@@ -78,7 +78,7 @@ class BaseTrainer(ABC):
         best_scores, best_labels = None, None
         for epoch in range(self.epochs):
             train_loss = self.epoch(train_loader)
-            statistic, scores, labels = self.evaluate(test_loader)
+            statistic, scores, labels = self.evaluate(val_loader)
             self.model.train()
             
             is_better = (statistic > best_statistic if self.mode == 'max' else statistic < best_statistic)
