@@ -32,13 +32,9 @@ public class Program {
         return true;
     }
     public bool FreivaldMatrixVerifier(double[,] A, double[,] B, double[,] C, double falsePositiveThreshold=0.01f, double tol = 1e-9) {
-        int rA = A.GetLength(0), cA = A.GetLength(1);
-        int rB = B.GetLength(0), cB = B.GetLength(1);
-        int rC = C.GetLength(0), cC = C.GetLength(1);
-        if (cA != rB || rA != rC || cB != cC) return false;
+        if (A.GetLength(1) != B.GetLength(0) || A.GetLength(0) != C.GetLength(0) || B.GetLength(1) != C.GetLength(1)) return false;
 
         double falsePositive = 1.0f;
-        double[,] r = new double[cB, 1];
         while (falsePositive>falsePositiveThreshold) {
             if (!SingleRoundVerifier(A,B,C, tol)) return false;
             falsePositive /= 2.0f;
