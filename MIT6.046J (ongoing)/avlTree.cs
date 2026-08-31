@@ -18,12 +18,18 @@ public class Node<T>  where T: IComparable<T>{
     public Node<T>? left {get; set;}
 	public Node<T>? right {get; set;}
     public bool isLeaf => (left==null) && (right==null);
-    public int height => Math.Max(left?.height ?? 0, right?.height ?? 0) + 1;
-    public bool balanced => Math.Abs((left?.height ?? 0)-(right?.height ?? 0)) <= 1;
+    public int height { get; private set; }
+    public bool balanced { get; private set; }
     public Node(T Value) {
         this.value = Value;
         this.left = null;
 		this.right = null;
+        this.RecomputeLocal();
+    }
+
+    public void RecomputeLocal() {
+        height = Math.Max(left?.height ?? 0, right?.height ?? 0) + 1;
+        balanced = Math.Abs((left?.height ?? 0)-(right?.height ?? 0)) <= 1;
     }
 
     public bool TryGetPredecessor(out T result) {
@@ -76,6 +82,7 @@ public class Node<T>  where T: IComparable<T>{
             default:
                 throw new InvalidOperationException("Unexpected result type.");
         }
+        this.RecomputeLocal();
 
         if (this.balanced) return new NoChangeResultNode<T>();
         // given unbalanced tree
@@ -87,38 +94,38 @@ public class Node<T>  where T: IComparable<T>{
         if (rotateLeft) {
             var l = this.left!;
             if ((l.left?.height ?? 0) >= (l.right?.height ?? 0)) {
-                return new ChildResultNode<T>(
-                    new Node<T>(l.value) {
-                        left=l.left, 
-                        right=new Node<T>(this.value) {left=l.right, right=this.right}
-                    }
-                );
+                var newRight = new Node<T>(this.value) {left=l.right, right=this.right};
+                newRight.RecomputeLocal();
+                var newRoot = new Node<T>(l.value) {left=l.left, right=newRight};
+                newRoot.RecomputeLocal();
+                return new ChildResultNode<T>(newRoot);
             } else {
                 var lr = l.right!;
-                return new ChildResultNode<T>(
-                    new Node<T>(lr.value) {
-                        left=new Node<T>(l.value) {left=l.left, right=lr.left}, 
-                        right=new Node<T>(this.value) {left=lr.right, right=this.right}
-                    }
-                );
+                var newLeft = new Node<T>(l.value) {left=l.left, right=lr.left};
+                newLeft.RecomputeLocal();
+                var newRight = new Node<T>(this.value) {left=lr.right, right=this.right};
+                newRight.RecomputeLocal();
+                var newRoot = new Node<T>(lr.value) { left=newLeft, right=newRight};
+                newRoot.RecomputeLocal();
+                return new ChildResultNode<T>(newRoot);
             }
         } else {
             var r = this.right!;
             if ((r.right?.height ?? 0) >= (r.left?.height ?? 0)) {
-                return new ChildResultNode<T>(
-                    new Node<T>(r.value) {
-                        right=r.right, 
-                        left=new Node<T>(this.value) {right=r.left, left=this.left}
-                    }
-                );
+                var newLeft = new Node<T>(this.value) {right=r.left, left=this.left};
+                newLeft.RecomputeLocal();
+                var newRoot = new Node<T>(r.value) {right=r.right, left=newLeft};
+                newRoot.RecomputeLocal();
+                return new ChildResultNode<T>(newRoot);
             } else {
                 var rl = r.left!;
-                return new ChildResultNode<T>(
-                    new Node<T>(rl.value) {
-                        right=new Node<T>(r.value) {right=r.right, left=rl.right}, 
-                        left=new Node<T>(this.value) {right=rl.left, left=this.left}
-                    }
-                );
+                var newRight = new Node<T>(r.value) {right=r.right, left=rl.right};
+                newRight.RecomputeLocal();
+                var newLeft = new Node<T>(this.value) {right=rl.left, left=this.left};
+                newLeft.RecomputeLocal();
+                var newRoot = new Node<T>(rl.value) {left=newLeft, right=newRight};
+                newRoot.RecomputeLocal();
+                return new ChildResultNode<T>(newRoot);
             }
         }
     }
@@ -129,11 +136,13 @@ public class Node<T>  where T: IComparable<T>{
         if (cmp <= 0) {
             if (left == null) { 
                 this.left = new Node<T>(Value); 
+                this.RecomputeLocal();
                 return new NoChangeResultNode<T>();
             }
         } else {
             if (right == null) {
-                this.right = new Node<T>(Value); 
+                this.right = new Node<T>(Value);
+                this.RecomputeLocal(); 
                 return new NoChangeResultNode<T>();
             }
         }
