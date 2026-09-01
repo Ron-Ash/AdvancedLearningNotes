@@ -188,6 +188,7 @@ public class Node<T, TSelf>  where T: IComparable<T> where TSelf: Node<T, TSelf>
     }
 }
 
+// Note that this allows for un-restricted number of augmentation variables via K = (K_1, K_2, ...)
 public class EasyNode<T,K> : Node<T, EasyNode<T, K>> where T: IComparable<T> {
     public K augmentationValue {get; private set;}
     private K augmentationDefaultValue;
